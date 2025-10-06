@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ultra Calculator v∞ — Deep Space v2</title>
+<style>
+:root{
+  --panel:#061410; --panel2:#0a1f1a;
+  --text:#e7fff3; --muted:#a7f3d0;
+  --btn:#0b1714; --border:#13392f;
+  --op:#0a1c17; --ok:#0d2b22; --accent:#0b211b; --danger:#1a0b0b;
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+html,body{height:100%; width:100%}
+body{
+  margin:0; height:100svh; overflow:hidden;
+  background:
+    radial-gradient(1200px 800px at 50% -200px, #0e1c17 0%, #030907 60%),
+    radial-gradient(900px 600px at 120% 20%, #062019 0%, transparent 60%),
+    radial-gradient(900px 600px at -20% 80%, #051b16 0%, transparent 60%);
+  color:var(--text);
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Helvetica,Arial;
+  padding:10px;
+  padding-bottom:calc(env(safe-area-inset-bottom)+10px);
+}
+.app{
+  height:100%; max-width:640px; margin:0 auto;
+  background:linear-gradient(180deg,var(--panel),var(--panel2));
+  border:1px solid #0f2a22; border-radius:18px;
+  box-shadow:0 16px 48px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.03);
+  display:grid; grid-template-rows:auto minmax(84px,1fr) auto 1fr auto; gap:6px; overflow:hidden;
+}
+.header{padding:10px}
+.title{display:flex;align-items:center;justify-content:space-between;gap:8px;font-weight:800;font-size:15px;color:#d1fae5}
+.pill{background:#081510;border:1px solid #153a2f;color:#a7f3d0;padding:3px 9px;border-radius:999px;font-size:11px}
+.sub{color:var(--muted);font-size:11px;margin-top:3px}
+.display{
+  margin:0 10px;background:linear-gradient(180deg,#06130f,#071d17);
+  border:1px solid #12392f;border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:6px;min-height:0;
+  box-shadow:inset 0 12px 28px rgba(0,0,0,.45);
+}
+.hist{min-height:16px;font-size:11px;color:#b7f7df;overflow-x:auto;white-space:nowrap;scrollbar-width:none}
+.hist::-webkit-scrollbar{display:none}
+.curr{flex:1;min-height:0;overflow:auto;word-break:break-all;font-variant-numeric:tabular-nums;line-height:1.2;font-size:26px}
+
+.toolbar{
+  margin:0 10px; background:#06120f;border:1px solid #12392f;border-radius:11px;padding:6px 8px;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+.tool-left{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tool-right{display:flex;align-items:center;gap:8px}
+label.switch{display:flex;align-items:center;gap:6px;font-size:11px;color:#a7f3d0}
+input[type="number"]{
+  background:#020c0a;border:1px solid #134036;color:var(--text);
+  border-radius:9px;padding:7px 10px;font-size:16px;outline:none; width:88px;
+}
+.switch input{width:42px;height:24px;-webkit-appearance:none;appearance:none;background:#081b15;border:1px solid #134036;border-radius:999px;position:relative}
+.switch input:checked{background:#0f3c31}
+.switch input::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;background:#e7fff3;border-radius:50%;transition:left .18s ease}
+.switch input:checked::after{left:21px}
+
+.pad{
+  padding:0 10px 10px; display:grid; grid-template-columns:repeat(4,1fr);
+  grid-auto-rows:minmax(40px,1fr); gap:8px; min-height:0;
+}
+button{
+  appearance:none;border:none;border-radius:12px;padding:10px;
+  font-size:17px;font-weight:800;color:var(--text);letter-spacing:.2px;
+  background:var(--btn);border:1px solid var(--border);
+  box-shadow:0 8px 16px rgba(0,0,0,.35), inset 0 1px 0 rgba(255,255,255,.04);
+  transition:transform .02s ease, background .15s ease, border-color .15s ease;
+}
+button:active{transform:translateY(1px) scale(.995)}
+.op{background:var(--op)} .ok{background:var(--ok)} .accent{background:var(--accent)} .danger{background:var(--danger)}
+.span-2{grid-column:span 2}
+.footer{padding:4px 10px calc(env(safe-area-inset-bottom)+6px); font-size:10.5px; color:#9de8cf; text-align:center; opacity:.9}
+
+@media (max-width:420px){
+  .curr{font-size:22px}
+  .toolbar{flex-wrap:wrap}
+  input[type="number"]{ width:82px }
+}
+</style>
+</head>
+<body>
+<div class="app" role="application" aria-label="Ultra Calculator v∞ — Deep Space v2">
+  <div class="header">
+    <div class="title">
+      <span>Ultra Calculator v∞ — Deep Space v2</span>
+      <span class="pill" id="status">Auto-save: ON</span>
+    </div>
+    <div class="sub">Arbitrary precision • No scientific notation • Animated streaming • Sound FX • Állapot mentése</div>
+  </div>
+
+  <div class="display" aria-live="polite">
+    <div class="hist" id="hist"></div>
+    <div class="curr" id="curr">0</div>
+  </div>
+
+  <div class="toolbar">
+    <div class="tool-left">
+      <label for="prec" class="switch">Prec
+        <input id="prec" type="number" min="0" max="100000" step="100" value="20000" inputmode="numeric">
+      </label>
+      <label for="render" class="switch">Render
+        <input id="render" type="number" min="1000" max="500000" step="1000" value="100000" inputmode="numeric">
+      </label>
+      <label for="speed" class="switch">Speed
+        <input id="speed" type="number" min="50" max="2000" step="50" value="300" inputmode="numeric">
+      </label>
+    </div>
+    <div class="tool-right">
+      <label class="switch"><span>Anim</span><input id="anim" type="checkbox" checked></label>
+      <label class="switch"><span>Sound</span><input id="snd" type="checkbox" checked></label>
+    </div>
+  </div>
+
+  <div class="pad">
+    <button class="danger" data-act="ac">AC</button>
+    <button class="accent" data-act="ce">CE</button>
+    <button class="accent" data-act="back">⌫</button>
+    <button class="op" data-op="div">÷</button>
+
+    <button data-num="7">7</button>
+    <button data-num="8">8</button>
+    <button data-num="9">9</button>
+    <button class="op" data-op="mul">×</button>
+
+    <button data-num="4">4</button>
+    <button data-num="5">5</button>
+    <button data-num="6">6</button>
+    <button class="op" data-op="sub">−</button>
+
+    <button data-num="1">1</button>
+    <button data-num="2">2</button>
+    <button data-num="3">3</button>
+    <button class="op" data-op="add">+</button>
+
+    <button data-act="neg">±</button>
+    <button data-num="0">0</button>
+    <button data-act="dot">.</button>
+    <button class="ok" data-act="eq">=</button>
+
+    <button class="accent span-2" data-act="fact">n!</button>
+    <button class="accent span-2" data-act="download">Save as .txt</button>
+  </div>
+
+  <div class="footer">No-scroll mobil layout • Óriás kimenetnél inkább .txt mentés</div>
+</div>
+
+<script>
+/* ===== DOM ===== */
+const histEl = document.getElementById('hist');
+const currEl = document.getElementById('curr');
+const precEl = document.getElementById('prec');
+const renderEl = document.getElementById('render');
+const speedEl = document.getElementById('speed');
+const animEl  = document.getElementById('anim');
+const sndEl   = document.getElementById('snd');
+const STORE = "ucalc_v2_state";
+
+/* ===== Persist ===== */
+function saveState(){
+  try{
+    localStorage.setItem(STORE, JSON.stringify({
+      hist: histEl.textContent, curr: currEl.textContent,
+      prec: precEl.value, render: renderEl.value, speed: speedEl.value,
+      anim: animEl.checked, snd: sndEl.checked
+    }));
+  }catch(_){}
+}
+function loadState(){
+  try{
+    const s = JSON.parse(localStorage.getItem(STORE)||"null"); if(!s) return;
+    histEl.textContent = s.hist||""; currEl.textContent = s.curr||"0";
+    precEl.value = s.prec||"20000"; renderEl.value = s.render||"100000"; speedEl.value = s.speed||"300";
+    animEl.checked = !!s.anim; sndEl.checked = !!s.snd;
+  }catch(_){}
+}
+
+/* ===== Audio ===== */
+const AudioFX = (()=>{
+  let ctx=null;
+  function ensure(){ if(!ctx) ctx = new (window.AudioContext||window.webkitAudioContext)(); return ctx; }
+  function tap(){ if(!sndEl.checked) return; const c=ensure(), t0=c.currentTime, o=c.createOscillator(), g=c.createGain(); o.type='triangle'; o.frequency.value=540; g.gain.value=0.05; o.connect(g).connect(c.destination); o.start(t0); o.stop(t0+0.06); }
+  function ok(){ if(!sndEl.checked) return; const c=ensure(), t0=c.currentTime, o=c.createOscillator(), g=c.createGain(); o.type='sine'; g.gain.setValueAtTime(0.06,t0); o.frequency.setValueAtTime(660,t0); o.connect(g).connect(c.destination); o.start(t0); o.frequency.exponentialRampToValueAtTime(990, t0+0.12); g.gain.exponentialRampToValueAtTime(0.0001, t0+0.18); o.stop(t0+0.2); }
+  return {tap, ok};
+})();
+
+/* ===== Big decimal core ===== */
+function _norm(n){
+  let d=n.digits.replace(/^0+/,''); if(d.length===0) return {sign:1,digits:"0",scale:0};
+  while(n.scale>0 && d.endsWith('0')){ d=d.slice(0,-1); n.scale--; }
+  return {sign:n.sign, digits:d, scale:n.scale};
+}
+function fromString(s){
+  s=(s+"").trim(); let sign=1;
+  if(s[0]==='+'){ s=s.slice(1); } else if(s[0]==='-'){ sign=-1; s=s.slice(1); }
+  if(!/^[0-9]*\.?[0-9]*$/.test(s)) throw new Error('Invalid');
+  if(s.includes('.')){ const [a,b='']=s.split('.'); const digits=(a.replace(/^0+/,'')+b).replace(/^$/,'0'); return _norm({sign,digits,scale:b.length}); }
+  const digits=s.replace(/^0+/,'').replace(/^$/,'0'); return _norm({sign,digits,scale:0});
+}
+function toString(n){
+  n=_norm({...n}); if(n.digits==="0") return "0"; const sgn=n.sign<0?'-':'';
+  if(n.scale===0) return sgn+n.digits;
+  const L=n.digits.length, i=L-n.scale;
+  if(i>0) return sgn+n.digits.slice(0,i)+"."+n.digits.slice(i);
+  return sgn+"0."+("0".repeat(-i))+n.digits;
+}
+function _align(a,b){
+  let sa=a.scale,sb=b.scale,da=a.digits,db=b.digits;
+  if(sa<sb){ da=da+"0".repeat(sb-sa); sa=sb; } else if(sb<sa){ db=db+"0".repeat(sa-sb); sb=sa; }
+  return {A:{sign:a.sign,digits:da,scale:sa},B:{sign:b.sign,digits:db,scale:sb},scale:sa};
+}
+function _cmp(x,y){ if(x.length!==y.length) return x.length>y.length?1:-1; if(x===y) return 0; return x>y?1:-1; }
+function _addDigits(x,y){ let i=x.length-1,j=y.length-1,c=0,o=""; while(i>=0||j>=0||c){ const dx=i>=0?x.charCodeAt(i)-48:0, dy=j>=0?y.charCodeAt(j)-48:0; const s=dx+dy+c; c=(s/10)|0; o=(s%10)+o; i--; j--; } return o.replace(/^0+/,'')||"0"; }
+function _subDigits(x,y){ let i=x.length-1,j=y.length-1,b=0,o=""; while(i>=0){ let dx=x.charCodeAt(i)-48-b, dy=j>=0?y.charCodeAt(j)-48:0; if(dx<dy){ dx+=10; b=1; } else b=0; o=(dx-dy)+o; i--; j--; } return o.replace(/^0+/,'')||"0"; }
+function _mulDigits(x,y){
+  if(x==="0"||y==="0") return "0";
+  const n=x.length,m=y.length,res=new Array(n+m).fill(0);
+  for(let i=n-1;i>=0;i--){ const xi=x.charCodeAt(i)-48;
+    for(let j=m-1;j>=0;j--){ const yj=y.charCodeAt(j)-48; const k=i+j+1, s=xi*yj+res[k]; res[k]=s%10; res[k-1]+= (s/10)|0; }
+  }
+  return res.join('').replace(/^0+/,'')||"0";
+}
+function add(a,b){
+  a=_norm({...a}); b=_norm({...b});
+  const {A,B,scale}=_align(a,b);
+  if(a.sign===b.sign) return _norm({sign:a.sign,digits:_addDigits(A.digits,B.digits),scale});
+  const cmp=_cmp(A.digits,B.digits);
+  if(cmp===0) return {sign:1,digits:"0",scale:0};
+  if(cmp>0) return _norm({sign:a.sign,digits:_subDigits(A.digits,B.digits),scale});
+  return _norm({sign:b.sign,digits:_subDigits(B.digits,A.digits),scale});
+}
+function neg(a){ return {sign:-a.sign,digits:a.digits,scale:a.scale}; }
+function sub(a,b){ return add(a,neg(b)); }
+function mul(a,b){ a=_norm({...a}); b=_norm({...b}); return _norm({sign:a.sign*b.sign, digits:_mulDigits(a.digits,b.digits), scale:a.scale+b.scale}); }
+async function divideStream(a,b,prec,emit){
+  a=_norm({...a}); b=_norm({...b});
+  if(b.digits==="0") throw new Error("Division by zero");
+  const divs=b.digits; let rem="0", Q="";
+  for(let i=0;i<a.digits.length;i++){
+    rem=(rem==="0"?"":rem)+a.digits[i];
+    rem=rem.replace(/^0+/,'')||"0";
+    if(_cmp(rem,divs)<0){ Q+="0"; continue; }
+    const q=_divStep(rem,divs); Q+=String(q.d); rem=q.r;
+  }
+  Q=Q.replace(/^0+/,'')||"0";
+  const scaleDiff=b.scale-a.scale;
+  let integer="", fracInitial="";
+  if(scaleDiff>=0){ integer=(Q==="0"?"0":Q)+"0".repeat(scaleDiff); }
+  else{ const shiftL=-scaleDiff; const padded=Q.padStart(shiftL+1,'0'); const cut=padded.length-shiftL; integer=padded.slice(0,cut).replace(/^0+/,'')||"0"; fracInitial=padded.slice(cut); }
+  await emit(integer,false);
+  if(prec>0 || fracInitial.length>0){ await emit(".",false); if(fracInitial.length) await emit(fracInitial,false); }
+  let produced=0, buf=""; const batch=200; let R=rem;
+  while(produced<prec && R!=="0"){
+    R=R+"0"; const q=_divStep(R,divs); buf+=String(q.d); R=q.r; produced++;
+    if(buf.length>=batch){ await emit(buf,false); buf=""; await new Promise(r=>setTimeout(r,0)); }
+  }
+  if(buf) await emit(buf,false);
+  await emit("",true);
+}
+function _divStep(rem,div){ let lo=0,hi=9,best=0; while(lo<=hi){ const mid=(lo+hi)>>1, prod=_mulDigits(div,String(mid)); const c=_cmp(prod,rem); if(c<=0){ best=mid; lo=mid+1; } else hi=mid-1; } const r=_subDigits(rem,_mulDigits(div,String(best))); return {d:best,r}; }
+
+/* ===== Factorial ===== */
+function factDigitsEstimate(n){ if(n<2) return 1; return Math.floor(n*Math.log10(n/Math.E)+0.5*Math.log10(2*Math.PI*n))+1; }
+async function factorialBig(n){ let res="1"; for(let i=2;i<=n;i++){ res=_mulDigits(res,String(i)); if(i%25===0) await new Promise(r=>setTimeout(r,0)); } return res; }
+function saveTxt(name, text){ const blob=new Blob([text],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0); }
+
+/* ===== UI state ===== */
+let S = { x: fromString("0"), y:null, op:null, typing:false, streaming:false, abort:false };
+function setHist(t){ histEl.textContent=t||""; histEl.scrollLeft=histEl.scrollWidth; saveState(); }
+function setCurr(t){ currEl.textContent=t; currEl.scrollTop=currEl.scrollHeight; saveState(); }
+function appendCurr(t){ currEl.textContent+=t; currEl.scrollTop=currEl.scrollHeight; saveState(); }
+
+function inputDigit(d){ if(S.streaming){S.abort=true;} AudioFX.tap(); let s=S.typing?currEl.textContent:"0"; if(s==="0") s=""; s+=d; try{ S.x=fromString(s); S.typing=true; setCurr(s);}catch(_){} }
+function inputDot(){ if(S.streaming){S.abort=true;} AudioFX.tap(); let s=S.typing?currEl.textContent:"0"; if(!s.includes(".")) s+="."; try{ S.x=fromString(s); S.typing=true; setCurr(s);}catch(_){} }
+function negate(){ if(S.streaming){S.abort=true;} AudioFX.tap(); S.x.sign*=-1; setCurr(toString(S.x)); }
+function backspace(){ if(S.streaming){S.abort=true;} AudioFX.tap(); let s=currEl.textContent; if(!S.typing) s=toString(S.x); if(s.length<=1){ s="0"; } else { s=s.slice(0,-1); if(s==="-") s="0"; if(s.endsWith(".")) s=s.slice(0,-1); } S.x=fromString(s); S.typing=true; setCurr(s); }
+function allClear(){ if(S.streaming){S.abort=true;} AudioFX.tap(); S={ x:fromString("0"), y:null, op:null, typing:false, streaming:false, abort:false }; setHist(""); setCurr("0"); }
+function clearEntry(){ if(S.streaming){S.abort=true;} AudioFX.tap(); S.x=fromString("0"); S.typing=false; setCurr("0"); }
+function setOp(op){ if(S.streaming){S.abort=true;} AudioFX.tap(); if(S.op && S.y){ equals(); return; } S.y=S.x; S.x=fromString("0"); S.op=op; S.typing=false; const sym={add:"+",sub:"−",mul:"×",div:"÷"}[op]||"?"; setHist(toString(S.y)+" "+sym); }
+
+async function streamText(fullText){
+  if(!animEl.checked){ setCurr(fullText); return; }
+  const ms = Math.max(10, Math.min(2000, parseInt(speedEl.value||"300",10)));
+  setCurr("");
+  for(let i=0;i<fullText.length;i+=200){
+    if(S.abort){ S.abort=false; break; }
+    const chunk=fullText.slice(i,i+200);
+    appendCurr(chunk);
+    await new Promise(r=>setTimeout(r, ms*0.2));
+  }
+}
+
+async function equals(){
+  if(S.streaming){ S.abort=true; }
+  AudioFX.tap();
+  if(!S.op || S.y===null) return;
+  try{
+    let r;
+    if(S.op==="add"){ r=add(S.y,S.x); setHist(toString(S.y)+" + "+toString(S.x)+" ="); await streamText(toString(r)); S.x=r; }
+    else if(S.op==="sub"){ r=sub(S.y,S.x); setHist(toString(S.y)+" − "+toString(S.x)+" ="); await streamText(toString(r)); S.x=r; }
+    else if(S.op==="mul"){ r=mul(S.y,S.x); setHist(toString(S.y)+" × "+toString(S.x)+" ="); await streamText(toString(r)); S.x=r; }
+    else if(S.op==="div"){
+      setHist(toString(S.y)+" ÷ "+toString(S.x)+" =");
+      const prec = Math.max(0, Math.min(100000, parseInt(precEl.value||"0",10)));
+      S.streaming=true; S.abort=false; setCurr("");
+      await divideStream(S.y,S.x,prec, async (chunk, done)=>{
+        if(S.abort){ S.streaming=false; return; }
+        appendCurr(chunk);
+        await new Promise(r=>setTimeout(r,0));
+        if(done){ S.streaming=false; }
+      });
+      r = fromString(currEl.textContent); S.x = r;
+    }
+    S.y=null; S.op=null; S.typing=false; AudioFX.ok();
+  }catch(e){ setHist(""); setCurr("Error: "+(e.message||"")); }
+}
+
+async function doFactorial(){
+  if(S.streaming){ S.abort=true; }
+  AudioFX.tap();
+  const val=currEl.textContent.trim();
+  if(val.includes('.')){ setHist("n! csak egészre"); return; }
+  const n=parseInt(val||"0",10); if(isNaN(n)||n<0){ setHist("n! csak nemnegatív egész"); return; }
+  const est=factDigitsEstimate(n);
+  const cap=Math.max(1000, Math.min(500000, parseInt(renderEl.value||"100000",10)));
+  setHist(n+"! számolás… ("+est.toLocaleString()+" számjegy várható)"); setCurr("0");
+  S.streaming=true;
+  const digits = await factorialBig(n);
+  S.streaming=false;
+  if(digits.length>cap){
+    setHist(n+"! kész • teljes eredmény .txt-be mentve");
+    setCurr("Kimenet túl nagy ("+digits.length.toLocaleString()+" számjegy). Lásd .txt");
+    saveTxt("factorial_"+n+".txt", digits);
+  }else{
+    if(animEl.checked){ await streamText(digits); } else { setCurr(digits); }
+  }
+  S.x = fromString(digits); S.y=null; S.op=null; S.typing=false; AudioFX.ok();
+}
+
+function downloadCurrent(){ const t=currEl.textContent||""; if(!t){ setHist("Nincs mit menteni"); return; } saveTxt("ultra_calc_output.txt", t); }
+
+/* Wire */
+document.querySelectorAll('[data-num]').forEach(b=> b.addEventListener('click', ()=>inputDigit(b.dataset.num)));
+document.querySelector('[data-act="dot"]').addEventListener('click', inputDot);
+document.querySelector('[data-act="neg"]').addEventListener('click', negate);
+document.querySelector('[data-act="back"]').addEventListener('click', backspace);
+document.querySelector('[data-act="ce"]').addEventListener('click', clearEntry);
+document.querySelector('[data-act="ac"]').addEventListener('click', allClear);
+document.querySelector('[data-act="eq"]').addEventListener('click', equals);
+document.querySelectorAll('[data-op]').forEach(b=> b.addEventListener('click', ()=>setOp(b.dataset.op)));
+document.querySelector('[data-act="fact"]').addEventListener('click', doFactorial);
+document.querySelector('[data-act="download"]').addEventListener('click', downloadCurrent);
+
+/* Keyboard */
+window.addEventListener('keydown',(e)=>{
+  if(e.key>='0'&&e.key<='9'){ inputDigit(e.key); }
+  else if(e.key==='.'||e.key===','){ inputDot(); }
+  else if(e.key==='+') setOp('add');
+  else if(e.key==='-') setOp('sub');
+  else if(e.key==='*') setOp('mul');
+  else if(e.key==='/') setOp('div');
+  else if(e.key==='!') doFactorial();
+  else if(e.key==='Enter'||e.key==='=') equals();
+  else if(e.key==='Backspace') backspace();
+  else if(e.key==='Escape') allClear();
+});
+
+/* Autosave on settings */
+[precEl,renderEl,speedEl,animEl,sndEl].forEach(el=> el.addEventListener('input', saveState));
+
+loadState(); // boot
+</script>
+</body>
+</html>
