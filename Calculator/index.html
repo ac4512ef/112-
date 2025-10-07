@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Math • Physics — Scientific Splash</title>
+<meta name="description" content="Brandmentes, tudományos nyitó: matematikai görbék, Lorenz-attraktor, rács és egyenlet-szalag. Nincs átirányítás."/>
+<style>
+  :root{
+    --bg:#090e16;--ink:#eaf3ff;--muted:#a6b5d2;
+    --accent:#74f0e2;--accent2:#c7a8ff;--border:#2a3b5a;--glass:rgba(18,28,48,.55);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;color:var(--ink);font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial;
+    background:radial-gradient(1100px 800px at 30% 25%,#0c1422 0%,#090e16 60%,#070b12 100%);
+    overflow:hidden;
+  }
+  canvas{position:fixed;inset:0;display:block}
+  #ui{
+    position:fixed;left:50%;transform:translateX(-50%);top:16px;display:flex;gap:8px;z-index:10;
+    background:linear-gradient(180deg,rgba(28,40,68,.72),rgba(14,20,34,.72));border:1px solid var(--border);
+    padding:8px 10px;border-radius:14px;backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,.4)
+  }
+  .btn{
+    padding:8px 12px;border-radius:10px;border:1px solid var(--border);background:var(--glass);color:var(--ink);
+    font-weight:700;cursor:pointer
+  }
+  .btn.primary{background:linear-gradient(90deg,var(--accent),#6af0e0);color:#06242a;font-weight:900}
+  #title{
+    position:fixed;left:24px;bottom:24px;z-index:10;
+    padding:10px 12px;border-radius:12px;border:1px solid var(--border);
+    background:linear-gradient(180deg,rgba(28,40,68,.72),rgba(14,20,34,.72));
+    backdrop-filter:blur(10px);box-shadow:0 10px 30px rgba(0,0,0,.4)
+  }
+  #title h1{margin:0 0 4px 0;font-size:18px;letter-spacing:.4px}
+  #title .sub{font-size:12px;color:var(--muted)}
+  /* ticker */
+  .eq{position:fixed;left:0;right:0;bottom:0;text-align:center;font-family:ui-monospace,Menlo,Consolas,monospace;
+      font-size:13px;color:var(--muted);opacity:.95;pointer-events:none;white-space:nowrap;overflow:hidden;
+      background:linear-gradient(180deg, rgba(10,16,28,0), rgba(10,16,28,.45))}
+  .eq span{display:inline-block;padding-left:100%;animation:ticker 28s linear infinite}
+  @keyframes ticker{0%{transform:translateX(0)}100%{transform:translateX(-100%)}}
+  @media (prefers-reduced-motion:reduce){.eq span{animation:none;padding-left:0}}
+</style>
+</head>
+<body>
+<canvas id="layer"></canvas>
+
+<div id="ui" role="toolbar" aria-label="vezérlő">
+  <button class="btn primary" id="toggle">Pause</button>
+  <button class="btn" id="theme">Theme</button>
+  <button class="btn" id="save">Save PNG</button>
+</div>
+
+<div id="title">
+  <h1>Mathematics • Physics</h1>
+  <div class="sub">Görbék, dinamikák, attraktorok — tiszta flow, nincs átirányítás</div>
+</div>
+
+<div class="eq"><span id="eqText"></span></div>
+
+<script>
+/* ===== Utilities ===== */
+const $ = q => document.querySelector(q);
+
+/* ===== Equations ticker ===== */
+const eqs = [
+  "Euler: e^{iπ}+1=0",
+  "Fizika: E = mc²",
+  "Maxwell: ∇·E = ρ/ε₀, ∇×B = μ₀(J + ε₀ ∂E/∂t)",
+  "Relativitás: γ = 1/√(1 − v²/c²)",
+  "Stat. fizika: S = k_B ln Ω",
+  "Dirac: iℏ ∂Ψ/∂t = ĤΨ",
+  "Gravitáció: F = G m₁ m₂ / r²",
+  "Széria: ∑_{n=1}^{∞} 1/n² = π²/6",
+  "Kombin: C(n,k) = n! / (k!(n−k)!)",
+  "Fourier: f(t)=∑ c_n e^{i n ω t}"
+];
+$('#eqText').textContent = "  •  " + eqs.join("  •  ");
+
+/* ===== Canvas setup ===== */
+const cv = document.getElementById('layer'), ctx = cv.getContext('2d');
+let W,H;
+function resize(){ W=cv.width=innerWidth; H=cv.height=innerHeight; }
+addEventListener('resize', resize); resize();
+
+/* ===== Scene elements ===== */
+let running = true, themeAlt=false;
+$('#toggle').onclick = ()=>{ running=!running; $('#toggle').textContent = running?'Pause':'Play'; if(running) requestAnimationFrame(loop); };
+$('#theme').onclick = ()=>{ themeAlt=!themeAlt; document.documentElement.style.setProperty('--accent', themeAlt?'#c0a6ff':'#74f0e2'); document.documentElement.style.setProperty('--accent2', themeAlt?'#ffd6a7':'#c7a8ff'); }
+$('#save').onclick = ()=>{
+  const a = document.createElement('a');
+  a.download = 'math_physics_splash.png';
+  a.href = cv.toDataURL('image/png');
+  a.click();
+};
+
+/* Grid background */
+function drawGrid(t){
+  ctx.strokeStyle='rgba(90,130,200,.10)';
+  ctx.lineWidth=1;
+  const g = 46;
+  const ox=(t*0.02)%g, oy=(t*0.015)%g;
+  for(let x=-ox; x<W; x+=g){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
+  for(let y=-oy; y<H; y+=g){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+}
+
+/* Function plotter (sin, exp, parabola cycling) */
+function drawFunctions(t){
+  const centerY = H*0.72;
+  // axes
+  ctx.strokeStyle='rgba(110,150,210,.18)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(0,centerY); ctx.lineTo(W,centerY); ctx.stroke();
+
+  // choose func by time
+  const mode = Math.floor(t/4000)%3;
+  ctx.lineWidth = 2;
+  if(mode===0){ // sine
+    ctx.strokeStyle='rgba(199,168,255,.75)';
+    ctx.beginPath();
+    for(let x=0;x<=W;x+=3){
+      const y = centerY + (24+6*Math.sin(t*0.001))*Math.sin(0.012*x + t*0.004);
+      if(x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  } else if(mode===1){ // exponential
+    ctx.strokeStyle='rgba(122,240,226,.8)';
+    ctx.beginPath();
+    for(let x=0;x<=W;x+=3){
+      const u = (x/W)*6 - 3; // -3..3
+      const y = centerY - 10*Math.exp(u) + 60;
+      if(x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  } else { // parabola
+    ctx.strokeStyle='rgba(255,214,166,.85)';
+    ctx.beginPath();
+    for(let x=0;x<=W;x+=3){
+      const u = (x-W/2)/120; // scale
+      const y = centerY + 6*u*u - 40;
+      if(x===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+}
+
+/* Simple 3-body orbital dance (toy physics) */
+const bodies = [
+  {x:-80,y:0,vx:0,vy:0.7,m:10,color:'rgba(122,240,226,.9)'},
+  {x:80,y:0,vx:0,vy:-0.7,m:10,color:'rgba(199,168,255,.9)'},
+  {x:0,y:0,vx:0.9,vy:0,m:16,color:'rgba(255,214,166,.95)'}
+];
+function stepBodies(){
+  const G = 0.05;
+  for(let i=0;i<bodies.length;i++){
+    let ax=0, ay=0;
+    for(let j=0;j<bodies.length;j++) if(i!==j){
+      const dx=bodies[j].x-bodies[i].x, dy=bodies[j].y-bodies[i].y;
+      const r2 = dx*dx+dy*dy + 20; // softening
+      const inv = 1/Math.sqrt(r2);
+      const f = G*bodies[j].m*inv*inv;
+      ax += f*dx*inv; ay += f*dy*inv;
+    }
+    bodies[i].vx += ax; bodies[i].vy += ay;
+  }
+  for(const b of bodies){ b.x += b.vx; b.y += b.vy; }
+}
+function drawBodies(){
+  ctx.save();
+  ctx.translate(W*0.78, H*0.28);
+  for(const b of bodies){
+    ctx.fillStyle = b.color;
+    ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI*2); ctx.fill();
+  }
+  // orbit ring
+  ctx.strokeStyle='rgba(122,240,226,.35)';
+  ctx.beginPath(); ctx.arc(0,0,110,0,Math.PI*2); ctx.stroke();
+  ctx.restore();
+}
+
+/* Lorenz attractor (integrated live) */
+const lor = {x:0.1, y:0, z:0, s:10, r:28, b:8/3, pts:[]};
+function stepLorenz(dt){
+  const {s,r,b} = lor; let {x,y,z} = lor;
+  // RK2
+  const dx1 = s*(y - x), dy1 = x*(r - z) - y, dz1 = x*y - b*z;
+  const x2 = x + dx1*dt*0.5, y2 = y + dy1*dt*0.5, z2 = z + dz1*dt*0.5;
+  const dx2 = s*(y2 - x2), dy2 = x2*(r - z2) - y2, dz2 = x2*y2 - b*z2;
+  x += dx2*dt; y += dy2*dt; z += dz2*dt;
+  lor.x=x; lor.y=y; lor.z=z;
+  lor.pts.push({x,y,z});
+  if(lor.pts.length>2000) lor.pts.shift();
+}
+function drawLorenz(){
+  // project to 2D
+  const scale = 6, ox = W*0.22, oy = H*0.34;
+  ctx.lineWidth=1.4;
+  ctx.strokeStyle='rgba(199,168,255,.7)';
+  ctx.beginPath();
+  for(let i=0;i<lor.pts.length;i++){
+    const p = lor.pts[i];
+    const x = ox + p.x*scale, y = oy + p.z*scale*0.7;
+    if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+}
+
+/* ===== Main loop ===== */
+let last=0;
+function loop(t){
+  if(!running) return;
+  const dt = Math.min(0.02, (t-last)/1000 || 0.016);
+  last = t;
+
+  ctx.clearRect(0,0,W,H);
+  drawGrid(t);
+  drawFunctions(t);
+  stepBodies(); drawBodies();
+  stepLorenz(0.7*dt); drawLorenz();
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
