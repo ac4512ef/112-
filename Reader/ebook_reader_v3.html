@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Egyszerű eBook Reader + EPUB (v3 – kompatibilis)</title>
+  <style>
+    :root{--bg:#0b0c0f;--text:#e7e9ee;--muted:#9aa3b2;--accent:#4da3ff;--paper:#0f1116;--card:#131722;--marker:#ffe08a;--maxw:760px;--lh:1.6;--fs:18px;--radius:16px}
+    [data-theme="day"]{--bg:#faf9f7;--text:#0f141a;--muted:#667085;--accent:#1463ff;--paper:#ffffff;--card:#ffffff;--marker:#fff2a8}
+    [data-theme="sepia"]{--bg:#f6efe3;--text:#2a210c;--muted:#7a6a4f;--accent:#965e2e;--paper:#fbf3e4;--card:#fbf3e4;--marker:#fde8a0}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--text);font:400 var(--fs)/var(--lh) system-ui,-apple-system,Segoe UI,Roboto}
+    .app{display:grid;grid-template-rows:auto 1fr auto;min-height:100svh}
+    .toolbar{position:sticky;top:0;z-index:10;backdrop-filter:saturate(160%) blur(8px);background:color-mix(in oklab, var(--bg) 80%, transparent);border-bottom:1px solid color-mix(in oklab, var(--text) 10%, transparent)}
+    .row{display:flex;gap:10px;align-items:center;padding:10px clamp(10px,2vw,20px)}
+    .row .sp{flex:1}
+    .btn,.seg button{border:1px solid color-mix(in oklab, var(--text) 18%, transparent);background:color-mix(in oklab, var(--card) 85%, transparent);color:var(--text);padding:8px 10px;border-radius:10px;cursor:pointer}
+    .btn:hover{border-color:var(--accent)}
+    .seg{display:inline-flex;border-radius:12px;overflow:hidden;border:1px solid color-mix(in oklab, var(--text) 18%, transparent)}
+    .seg button{border:0;padding:8px 10px}
+    .seg button[aria-pressed="true"]{background:var(--accent);color:#fff}
+    .content{padding:min(4vw,32px);display:grid;place-items:center}
+    article{width:100%;max-width:var(--maxw);background:var(--paper);box-shadow:0 10px 30px color-mix(in oklab, black 18%, transparent);padding:clamp(16px,3vw,28px);border-radius:var(--radius)}
+    article h1{font-size:clamp(26px,3.4vw,34px);margin:0 0 .6em}
+    .sidepanel{position:fixed;inset:0 0 auto auto;width:min(92vw,360px);max-height:80svh;overflow:auto;margin:12px;padding:12px;border-radius:14px;background:var(--card);box-shadow:0 8px 24px color-mix(in oklab, black 30%, transparent);display:none;z-index:20}
+    .sidepanel.open{display:block}
+    .progress{height:6px;background:color-mix(in oklab, var(--text) 10%, transparent);position:sticky;bottom:0;width:100%}
+    .progress>div{height:100%;width:0%;background:var(--accent)}
+    .tiny{color:var(--muted);font-size:12px}
+    input[type="range"]{accent-color:var(--accent)}
+    .dropzone{border:1px dashed color-mix(in oklab, var(--text) 30%, transparent);border-radius:14px;padding:16px;text-align:center;color:var(--muted)}
+    .nav{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin:8px 0}
+    input[type="file"].vis-hide{position:absolute;width:0.1px;height:0.1px;opacity:0;overflow:hidden;z-index:-1}
+    #status{margin-left:8px;font-size:12px;color:var(--muted)}
+    .error{color:#ffb3b3}
+  </style>
+</head>
+<body data-theme="night">
+<div class="app">
+  <header class="toolbar" role="banner">
+    <div class="row" style="flex-wrap:wrap">
+      <label for="fileInput" class="btn" title="Könyv megnyitása (EPUB/TXT/MD/HTML)">📖 Megnyitás</label>
+      <input id="fileInput" class="vis-hide" type="file" accept=".epub,application/epub+zip,.txt,.md,.html,.htm" />
+      <div class="seg" role="group" aria-label="Téma">
+        <button data-theme="day" aria-pressed="false" title="Világos">☀️</button>
+        <button data-theme="night" aria-pressed="true" title="Sötét">🌙</button>
+        <button data-theme="sepia" aria-pressed="false" title="Sépia">📜</button>
+      </div>
+      <label class="tiny">Betűméret <input id="fs" type="range" min="14" max="24" value="18" /></label>
+      <label class="tiny">Sorköz <input id="lh" type="range" min="1.2" max="2.0" step="0.05" value="1.6" /></label>
+      <label class="tiny">Sor szélesség <input id="mw" type="range" min="560" max="920" step="10" value="760" /></label>
+      <button class="btn" id="tocBtn" title="Tartalomjegyzék">🧭 Tartalom</button>
+      <button class="btn" id="bmAdd" title="Könyvjelző hozzáadása">🔖 Ment</button>
+      <button class="btn" id="bmList" title="Könyvjelzők">🔎 Jelzők</button>
+      <span id="status" class="tiny"></span>
+      <span class="sp"></span>
+      <input id="search" placeholder="Keresés… (Enter)" style="min-width:160px;padding:8px 10px;border-radius:10px;border:1px solid color-mix(in oklab, var(--text) 18%, transparent);background:var(--paper);color:var(--text)" />
+    </div>
+  </header>
+
+  <main class="content" role="main">
+    <article id="page" tabindex="0" aria-live="polite">
+      <h1>Üdv az EPUB‑képes eBook Readerben</h1>
+      <p>Válassz <strong>.epub</strong> fájlt a <em>Megnyitás</em> gombbal, vagy dobd ide:</p>
+      <div class="dropzone" id="drop">Dobd ide az EPUB-ot (vagy TXT/MD/HTML-t)</div>
+      <p class="tiny">Ha a megnyitás után nem történik semmi, valószínűleg a böngésződ nem támogatja a <code>DecompressionStream</code> funkciót. Ilyenkor töltsd be ezt az oldalt HTTPS-ről (pl. GitHub Pages) vagy frissíts böngészőt. Ez a verzió hibát is jelez lent.</p>
+    </article>
+  </main>
+
+  <div class="nav" id="chapNav" hidden>
+    <button class="btn" id="prevCh">⬅️ Előző</button>
+    <span class="tiny" id="chInfo">1 / 1</span>
+    <button class="btn" id="nextCh">Következő ➡️</button>
+  </div>
+
+  <div class="progress" aria-hidden="true"><div id="progbar"></div></div>
+
+  <aside class="sidepanel" id="tocPanel" aria-label="Tartalomjegyzék">
+    <h4>Tartalom</h4>
+    <ul id="toc"></ul>
+  </aside>
+  <aside class="sidepanel" id="bmPanel" aria-label="Könyvjelzők">
+    <h4>Könyvjelzők</h4>
+    <ul id="bmlist"></ul>
+  </aside>
+</div>
+
+<script>
+(() => {
+  const $ = (id)=>document.getElementById(id);
+  const els = {
+    root: document.body, fileInput: $('fileInput'), page: $('page'), fs:$('fs'), lh:$('lh'), mw:$('mw'),
+    search:$('search'), tocBtn:$('tocBtn'), tocPanel:$('tocPanel'), toc:$('toc'), bmAdd:$('bmAdd'), bmList:$('bmList'),
+    bmPanel:$('bmPanel'), bmlist:$('bmlist'), prog:$('progbar'), drop:$('drop'), chapNav:$('chapNav'),
+    prevCh:$('prevCh'), nextCh:$('nextCh'), chInfo:$('chInfo'), status:$('status')
+  };
+  const themeBtns = document.querySelectorAll('.seg button');
+  function setStatus(msg, isErr){ els.status.textContent = msg||''; els.status.classList.toggle('error', !!isErr); }
+
+  let current = { id:null, name:null, type:null };
+  const KEY = (s)=>`ebr.v3.${current.id ?? 'welcome'}.${s}`;
+  const save=(k,v)=>localStorage.setItem(k, JSON.stringify(v));
+  const load=(k,f=null)=>{ try{ const v=JSON.parse(localStorage.getItem(k)); return (v==null)?f:v }catch{ return f } };
+
+  function setTheme(theme){
+    document.body.setAttribute('data-theme', theme);
+    themeBtns.forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.theme===theme)));
+    save('ebr.v3.theme', theme);
+  }
+  setTheme(load('ebr.v3.theme','night'));
+  themeBtns.forEach(b=>b.addEventListener('click', ()=>setTheme(b.dataset.theme)));
+
+  function applySettings(){
+    document.documentElement.style.setProperty('--fs', els.fs.value+'px');
+    document.documentElement.style.setProperty('--lh', els.lh.value);
+    document.documentElement.style.setProperty('--maxw', els.mw.value+'px');
+    save('ebr.v3.settings', {fs:+els.fs.value, lh:+els.lh.value, mw:+els.mw.value});
+  }
+  const st=load('ebr.v3.settings'); if(st){ els.fs.value=st.fs; els.lh.value=st.lh; els.mw.value=st.mw; } applySettings();
+  els.fs.oninput=els.lh.oninput=els.mw.oninput=applySettings;
+
+  els.fileInput.addEventListener('change', async (e)=>{
+    const f=e.target.files?.[0]; if(!f) return;
+    setStatus('Megnyitás: '+f.name);
+    try{
+      await loadFile(f);
+      setStatus('Kész: '+f.name);
+    }catch(err){
+      console.error(err);
+      setStatus('Hiba: '+(err?.message||err), true);
+      alert('EPUB kibontás hiba: '+(err?.message||err)+'\nLehetséges ok: a böngésző nem támogatja a DecompressionStream API-t. Próbáld meg Chrome-ban HTTP(S)-ről megnyitni.');
+    }finally{
+      e.target.value='';
+    }
+  });
+
+  ['dragenter','dragover'].forEach(ev=>{ document.addEventListener(ev,(e)=>{e.preventDefault(); els.drop?.classList.add('drag')}); });
+  ['dragleave','drop'].forEach(ev=>{ document.addEventListener(ev,(e)=>{e.preventDefault(); els.drop?.classList.remove('drag')}); });
+  document.addEventListener('drop', async (e)=>{ const f=e.dataTransfer?.files?.[0]; if(f) { try{ await loadFile(f); }catch(err){ setStatus('Hiba: '+(err?.message||err), true); } } });
+
+  // ---- ZIP UNZIP (with DS fallback) ----
+  async function inflateRaw(u8){
+    // try deflate-raw first, then deflate
+    if('DecompressionStream' in window){
+      try{
+        const ds = new DecompressionStream('deflate-raw');
+        const resp = new Response(new Blob([u8]).stream().pipeThrough(ds));
+        const ab = await resp.arrayBuffer(); return new Uint8Array(ab);
+      }catch(e1){
+        try{
+          const ds = new DecompressionStream('deflate');
+          const resp = new Response(new Blob([u8]).stream().pipeThrough(ds));
+          const ab = await resp.arrayBuffer(); return new Uint8Array(ab);
+        }catch(e2){
+          throw new Error('DecompressionStream nem támogatott: '+e2.message);
+        }
+      }
+    } else {
+      throw new Error('DecompressionStream nem elérhető ebben a böngészőben');
+    }
+  }
+  const u32 = (u,i)=>u[i]|u[i+1]<<8|u[i+2]<<16|u[i+3]<<24;
+  async function unzip(buf){
+    const u = new Uint8Array(buf); let r=u.length-22;
+    while(r>=0 && u32(u,r)!==0x06054b50) r--;
+    if(r<0) throw new Error('Érvénytelen ZIP (EOCD nem található)');
+    const entries = u[r+10]|u[r+11]<<8;
+    const cdOff = u[r+16]|u[r+17]<<8|u[r+18]<<16|u[r+19]<<24;
+    const out = {};
+    let off = cdOff;
+    for(let i=0;i<entries;i++){
+      if(u32(u,off)!==0x02014b50) throw new Error('Hibás központi fejléc');
+      const mfn = u[off+28]|u[off+29]<<8;
+      const mex = u[off+30]|u[off+31]<<8;
+      const lho = u[off+42]|u[off+43]<<8|u[off+44]<<16|u[off+45]<<24;
+      const name = new TextDecoder().decode(u.subarray(off+46, off+46+mfn));
+      off += 46 + mfn + mex + (u[off+32]|u[off+33]<<8);
+      const lh = lho; if(u32(u,lh)!==0x04034b50) throw new Error('Hibás lokális fejléc');
+      const fnl = u[lh+26]|u[lh+27]<<8; const exl = u[lh+28]|u[lh+29]<<8;
+      const cm = u[lh+8]|u[lh+9]<<8;
+      const csz = u[lh+18]|u[lh+19]<<8|u[lh+20]<<16|u[lh+21]<<24;
+      const pos = lh+30+fnl+exl;
+      const data = u.subarray(pos, pos+csz);
+      if(cm===0){ out[name]=data; }
+      else if(cm===8){ out[name]=await inflateRaw(data); }
+      else { throw new Error('Nem támogatott ZIP tömörítés: '+cm); }
+    }
+    return out;
+  }
+
+  // ---- EPUB handling ----
+  let epub=null, chapIndex=0;
+  async function loadFile(file){
+    const ext=(file.name.split('.').pop()||'').toLowerCase();
+    current = { id: hash(file.name+'-'+file.size), name:file.name, type:ext };
+    save('ebr.v3.last', current);
+
+    if(ext==='epub'){
+      await openEPUB(file);
+    }else{
+      const text = await file.text(); renderPlain(text, ext); buildTOCFromHeadings(); els.chapNav.hidden=true;
+    }
+    const y = load(KEY('scroll'),0); requestAnimationFrame(()=>{ window.scrollTo({top:y,behavior:'auto'}); updateProgress(); });
+  }
+
+  function renderPlain(text, ext){
+    let html='';
+    if(ext==='md' || /^#\s/m.test(text)) html = renderMarkdown(text);
+    else if(ext==='html' || ext==='htm' || /<\w+[^>]*>/i.test(text)) html = sanitizeHTML(text);
+    else html = `<pre style="white-space:pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace">${escapeHtml(text)}</pre>`;
+    els.page.innerHTML = html;
+  }
+
+  async function openEPUB(file){
+    const buf = await file.arrayBuffer();
+    const files = await unzip(buf);
+    const fmap = new Map(); Object.keys(files).forEach(k=>fmap.set(k.replace(/\\/g,'/'), files[k]));
+    const container = fmap.get('META-INF/container.xml') || fmap.get('meta-inf/container.xml');
+    if(!container){ throw new Error('Hiányzó container.xml'); }
+    const contXML = new DOMParser().parseFromString(new TextDecoder().decode(container), 'application/xml');
+    const rootfile = contXML.querySelector('rootfile')?.getAttribute('full-path');
+    if(!rootfile){ throw new Error('Nem található OPF'); }
+    const opfPath = rootfile; const opfDir = opfPath.split('/').slice(0,-1).join('/');
+    const opfXML = new DOMParser().parseFromString(new TextDecoder().decode(fmap.get(opfPath)), 'application/xml');
+
+    const manifest={}; opfXML.querySelectorAll('manifest>item').forEach(it=>{
+      manifest[it.getAttribute('id')]={ href: it.getAttribute('href'), type: it.getAttribute('media-type'), properties: it.getAttribute('properties')||'' };
+    });
+    const spine=[]; const spineEl=opfXML.querySelector('spine'); spineEl?.querySelectorAll('itemref').forEach(ir=>{ const idref=ir.getAttribute('idref'); if(manifest[idref]) spine.push(idref); });
+
+    let navToc=[]; const navItem = Object.entries(manifest).find(([id,it])=> (it.properties||'').split(/\s+/).includes('nav'));
+    if(navItem){ const href = resolvePath(opfDir, navItem[1].href); const xhtml = new TextDecoder().decode(fmap.get(href)); navToc = parseNavToc(xhtml, href); }
+    else if(spineEl?.getAttribute('toc')){ const ncxId=spineEl.getAttribute('toc'); const ncxItem=manifest[ncxId]; if(ncxItem){ const href=resolvePath(opfDir,ncxItem.href); const xml=new TextDecoder().decode(fmap.get(href)); navToc=parseNcx(xml, href); } }
+
+    epub={ files:fmap, opfDir, manifest, spine, nav:navToc, blobs:new Map() };
+    chapIndex=0; await renderChapter(chapIndex); buildTOCFromEPUB(); els.chapNav.hidden=false;
+  }
+
+  function parseNavToc(xhtml, base){
+    const doc=new DOMParser().parseFromString(xhtml, 'application/xhtml+xml');
+    const nav=doc.querySelector('nav[epub\\:type="toc"], nav[role="doc-toc"]')||doc.querySelector('nav');
+    const out=[]; if(nav){ nav.querySelectorAll('a[href]').forEach(a=> out.push({ title:a.textContent.trim(), href:fixHref(base, a.getAttribute('href')) })); }
+    return out;
+  }
+  function parseNcx(xml, base){
+    const doc=new DOMParser().parseFromString(xml,'application/xml'); const out=[];
+    doc.querySelectorAll('navPoint').forEach(np=>{ const t=np.querySelector('navLabel>text')?.textContent||''; const src=np.querySelector('content')?.getAttribute('src')||''; out.push({ title:t.trim(), href:fixHref(base, src) }); });
+    return out;
+  }
+  function resolvePath(dir, rel){
+    if(!dir) return rel; if(/^[a-z]+:\/|^\//i.test(rel)) return rel;
+    const stack=dir.split('/').filter(Boolean); rel.split('/').forEach(seg=>{ if(!seg||seg=='.') return; if(seg==='..') stack.pop(); else stack.push(seg); });
+    return stack.join('/');
+  }
+  function fixHref(base, href){
+    if(!href) return ''; const [p,hash]=href.split('#'); const dir=base.split('/').slice(0,-1).join('/'); const full=resolvePath(dir,p); return hash?full+'#'+hash:full;
+  }
+
+  async function renderChapter(i){
+    if(!epub) return;
+    const idref=epub.spine[i]; if(!idref) return;
+    const item=epub.manifest[idref]; const path=resolvePath(epub.opfDir, item.href);
+    const buf=epub.files.get(path); if(!buf){ els.page.innerHTML='<p class="tiny error">Hiányzó fejezet: '+escapeHtml(path)+'</p>'; return; }
+    let html=new TextDecoder().decode(buf);
+    const doc=new DOMParser().parseFromString(html,'application/xhtml+xml'); const body=doc.querySelector('body')||doc.documentElement;
+    body.querySelectorAll('img,image').forEach(el=>{ const attr=el.getAttribute('src')?'src':(el.getAttribute('xlink:href')&&'xlink:href'); if(!attr) return; const ref=el.getAttribute(attr); const full=fixHref(path, ref); const url=blobURLFor(full); if(url) el.setAttribute(attr,url); });
+    doc.querySelectorAll('link[rel="stylesheet"][href]').forEach(link=>{ const full=fixHref(path, link.getAttribute('href')); const css=bytesToText(epub.files.get(full)); if(css){ const style=doc.createElement('style'); style.textContent=css; link.replaceWith(style); } });
+    els.page.innerHTML = sanitizeHTML(new XMLSerializer().serializeToString(body));
+    els.chInfo.textContent=(i+1)+' / '+epub.spine.length; highlightTOC(path);
+  }
+  function blobURLFor(full){ if(!full||!epub.files.has(full)) return null; if(!epub.blobs.has(full)){ const bytes=epub.files.get(full); const ext=(full.split('.').pop()||'').toLowerCase(); const mime=ext==='png'?'image/png':ext==='jpg'||ext==='jpeg'?'image/jpeg':ext==='gif'?'image/gif':ext==='svg'?'image/svg+xml':'application/octet-stream'; const url=URL.createObjectURL(new Blob([bytes],{type:mime})); epub.blobs.set(full,url);} return epub.blobs.get(full); }
+  function bytesToText(u8){ return u8?new TextDecoder().decode(u8):null; }
+
+  function buildTOCFromEPUB(){
+    els.toc.innerHTML='';
+    const items = epub.nav?.length ? epub.nav : epub.spine.map((id,idx)=>({ title:'Fejezet '+(idx+1), href: resolvePath(epub.opfDir, epub.manifest[id].href) }));
+    items.forEach((it,idx)=>{
+      const li=document.createElement('li'); li.textContent=it.title?.trim()||('Fejezet '+(idx+1));
+      li.addEventListener('click', async ()=>{
+        const i=epub.spine.findIndex(id=> resolvePath(epub.opfDir, epub.manifest[id].href)===it.href || it.href.startsWith(resolvePath(epub.opfDir, epub.manifest[id].href)));
+        if(i>=0){ chapIndex=i; await renderChapter(chapIndex); els.tocPanel.classList.remove('open'); window.scrollTo({top:0,behavior:'smooth'}); }
+      });
+      els.toc.appendChild(li);
+    });
+  }
+  function highlightTOC(path){ const items=els.toc.querySelectorAll('li'); items.forEach(li=>li.style.background='transparent'); const idx=epub?.spine?.findIndex(id=> resolvePath(epub.opfDir, epub.manifest[id].href)===path); if(idx>=0 && items[idx]) items[idx].style.background='color-mix(in oklab, var(--accent) 18%, transparent)'; }
+
+  function buildTOCFromHeadings(){
+    const heads=els.page.querySelectorAll('h1,h2,h3'); els.toc.innerHTML=''; if(!heads.length){ els.toc.innerHTML='<li class="tiny">Nincs fejezetcím</li>'; return; }
+    heads.forEach((h,i)=>{ const id=h.id||`sec-${i}`; h.id=id; const li=document.createElement('li'); li.textContent=h.textContent.trim().slice(0,180); li.addEventListener('click', ()=>{ els.tocPanel.classList.remove('open'); document.getElementById(id).scrollIntoView({behavior:'smooth', block:'start'}); }); els.toc.appendChild(li); });
+  }
+
+  // Panels & progress & search & bookmarks (same as v2, trimmed)
+  function togglePanel(p){ p.classList.toggle('open'); }
+  els.tocBtn.addEventListener('click', ()=>togglePanel(els.tocPanel));
+  els.bmList.addEventListener('click', ()=>{ renderBookmarks(); togglePanel(els.bmPanel); });
+  document.addEventListener('click',(e)=>{ if(e.target.closest('.sidepanel,#tocBtn,#bmList')) return; els.tocPanel.classList.remove('open'); els.bmPanel.classList.remove('open'); });
+
+  let t; window.addEventListener('scroll', ()=>{ clearTimeout(t); t=setTimeout(()=>{ updateProgress(); save(KEY('scroll'), window.scrollY|0); }, 80); }, {passive:true});
+  function updateProgress(){ const max=document.documentElement.scrollHeight-window.innerHeight; const pct=max>0?(window.scrollY/max)*100:0; els.prog.style.width=pct.toFixed(2)+'%'; }
+
+  els.search.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ doSearch(els.search.value.trim()); } });
+  function doSearch(q){
+    els.page.querySelectorAll('mark.search-hit').forEach(m=>{ const t=document.createTextNode(m.textContent); m.replaceWith(t); });
+    if(!q) return; const it=document.createNodeIterator(els.page, NodeFilter.SHOW_TEXT); let node; const hits=[]; const re=new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi');
+    while(node=it.nextNode()){ if(!node.nodeValue.trim()) continue; const frag=document.createDocumentFragment(); let last=0; const text=node.nodeValue; re.lastIndex=0; let m; while(m=re.exec(text)){ if(m.index>last) frag.append(text.slice(last,m.index)); const mark=document.createElement('mark'); mark.className='search-hit'; mark.textContent=m[0]; frag.append(mark); last=re.lastIndex; hits.push(mark); } if(last>0){ if(last<text.length) frag.append(text.slice(last)); node.replaceWith(frag); } }
+    if(hits.length){ hits[0].scrollIntoView({behavior:'smooth', block:'center'}); }
+  }
+
+  els.bmAdd.addEventListener('click', addBookmark);
+  function addBookmark(){ if(!current.id){ alert('Nincs megnyitott könyv.'); return; } const y=window.scrollY|0; const title=(els.page.querySelector('h1,h2,h3')?.textContent || current.name || 'Könyv').slice(0,120); const list=load(KEY('bmarks'), []); list.push({ y, title, at:Date.now(), chapIndex }); save(KEY('bmarks'), list); toast('Könyvjelző mentve'); }
+  function renderBookmarks(){ const list=load(KEY('bmarks'), []); els.bmlist.innerHTML=''; if(!list.length){ els.bmlist.innerHTML='<li class="tiny">Nincs könyvjelző</li>'; return; } list.forEach((b,i)=>{ const li=document.createElement('li'); const d=new Date(b.at).toLocaleString(); li.innerHTML=`<div><strong>${escapeHtml(b.title)}</strong></div><div class="tiny">${d} – poz: ${b.y}px ${b.chapIndex!=null?('– fejezet '+(b.chapIndex+1)):""}</div>`; li.addEventListener('click', async ()=>{ if(epub && typeof b.chapIndex==='number'){ chapIndex=b.chapIndex; await renderChapter(chapIndex); } window.scrollTo({top:b.y, behavior:'smooth'}); els.bmPanel.classList.remove('open'); }); li.addEventListener('contextmenu',(e)=>{e.preventDefault(); removeBookmark(i);}); els.bmlist.appendChild(li); }); }
+  function removeBookmark(i){ const list=load(KEY('bmarks'), []); list.splice(i,1); save(KEY('bmarks'), list); renderBookmarks(); }
+
+  document.addEventListener('keydown', async (e)=>{
+    if(e.target===els.search) return;
+    if(['ArrowRight','PageDown','l','L'].includes(e.key)){ if(epub){ if(chapIndex<epub.spine.length-1){ chapIndex++; await renderChapter(chapIndex); window.scrollTo({top:0,behavior:'smooth'});} } else window.scrollBy({top: window.innerHeight*0.9, behavior:'smooth'}); }
+    if(['ArrowLeft','PageUp','j','J'].includes(e.key)){ if(epub){ if(chapIndex>0){ chapIndex--; await renderChapter(chapIndex); window.scrollTo({top:0,behavior:'smooth'});} } else window.scrollBy({top: -window.innerHeight*0.9, behavior:'smooth'}); }
+    if(e.key==='t'||e.key==='T') window.scrollTo({top:0,behavior:'smooth'});
+    if(e.key==='b'||e.key==='B') addBookmark();
+    if(e.key==='f'||e.key==='F') els.search.focus();
+  });
+
+  function sanitizeHTML(html){ const temp=document.createElement('template'); temp.innerHTML=html; const allowed=new Set(['P','H1','H2','H3','H4','H5','H6','UL','OL','LI','A','EM','STRONG','CODE','PRE','BLOCKQUOTE','HR','BR','SPAN','DIV','IMG','FIGURE','FIGCAPTION','TABLE','THEAD','TBODY','TR','TH','TD','DL','DT','DD','SUP','SUB']); const walker=document.createTreeWalker(temp.content, NodeFilter.SHOW_ELEMENT, null); let n; const remove=[]; while(n=walker.nextNode()){ if(!allowed.has(n.tagName)) remove.push(n); if(n.tagName==='A'){ n.setAttribute('target','_blank'); n.setAttribute('rel','noopener'); } if(n.tagName==='IMG'){ n.removeAttribute('srcset'); n.removeAttribute('onerror'); n.removeAttribute('onclick'); n.style.maxWidth='100%'; } } remove.forEach(el=>el.replaceWith(...el.childNodes)); return temp.innerHTML; }
+  function escapeHtml(s){ return s.replace(/[&<>\"']/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',\"'\":'&#39;'}[ch])) }
+  function hash(s){ let h=2166136261>>>0; for(let i=0;i<s.length;i++){h^=s.charCodeAt(i); h=Math.imul(h,16777619);} return h.toString(36); }
+  function toast(msg){ const el=document.createElement('div'); el.textContent=msg; el.style.cssText='position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--card);border:1px solid color-mix(in oklab, var(--text) 18%, transparent);padding:10px 14px;border-radius:12px;z-index:99;box-shadow:0 8px 24px rgba(0,0,0,.3)'; document.body.appendChild(el); setTimeout(()=>{el.remove()},1400); }
+
+  const last=load('ebr.v3.last'); if(last){ current=last; }
+})();
+</script>
+</body>
+</html>
