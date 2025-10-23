@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Big Precision Calculator v2</title>
+<style>
+:root{
+  --bg:#0b0f14; --panel:#111722; --glass:#0f1520; --ink:#e6eefc; --muted:#9fb0d2;
+  --btn:#1b2440; --op:#233057; --ok:#244a34; --warn:#4a2430; --accent:#343e72; --gold:#4a3b1a;
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:radial-gradient(1200px 800px at 50% -200px,#162033 0%, #0b0f14 60%);
+  color:var(--ink);font-family:system-ui,Segoe UI,Roboto,Inter,Arial;display:flex;align-items:center;justify-content:center;padding:12px}
+.app{width:100%;max-width:560px;background:linear-gradient(180deg,var(--panel),var(--glass));border:1px solid #1b2546;border-radius:18px;
+  box-shadow:0 12px 28px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.04);overflow:hidden}
+.head{padding:14px 14px 0 14px}
+.title{display:flex;align-items:center;justify-content:space-between;font-weight:800;letter-spacing:.2px;color:#cfe0ff}
+.badge{font-size:12px;padding:6px 10px;border-radius:999px;border:1px solid #20305a;background:#0c1326;color:#cfe0ff}
+.sub{padding:2px 14px 0 14px;font-size:12px;color:var(--muted)}
+.display{margin:12px 14px;background:#0c1326;border:1px solid #1a274d;border-radius:12px;min-height:88px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.hist{min-height:18px;color:#9fb2d8;font-size:13px;white-space:nowrap;overflow:auto;scrollbar-width:none}
+.hist::-webkit-scrollbar{display:none}
+.curr{flex:1;font-size:28px;line-height:1.2;word-break:break-all;overflow:auto;max-height:160px}
+.controls{display:flex;gap:10px;flex-wrap:wrap;padding:0 14px 8px;align-items:center}
+label{font-size:12px;color:var(--muted)}
+input[type=number]{background:#0c1326;border:1px solid #1a274d;color:var(--ink);border-radius:10px;padding:8px 10px;max-width:160px}
+.toolbar{display:flex;gap:8px;align-items:center;justify-content:flex-start;padding:0 14px 8px}
+.toolbar button{font-size:14px;padding:8px 10px;border-radius:10px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:8px 14px 14px}
+button{appearance:none;border:none;border-radius:12px;padding:14px;font-size:18px;font-weight:800;background:var(--btn);
+  color:var(--ink);border:1px solid #203054;box-shadow:0 6px 14px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.04);transition:transform .02s ease}
+button:active{transform:translateY(1px) scale(.995)}
+.op{background:var(--op)}
+.ok{background:var(--ok)}
+.warn{background:var(--warn)}
+.accent{background:var(--accent)}
+.gold{background:var(--gold)}
+.span-2{grid-column:span 2}
+.meta{padding:6px 14px 12px;color:var(--muted);font-size:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.meta div{background:#0c1326;border:1px solid #1a274d;border-radius:10px;padding:8px}
+.meta b{color:#cfe0ff}
+.footer{padding:8px 14px 14px;color:var(--muted);font-size:12px;text-align:center}
+@media (max-width:380px){ .curr{font-size:24px} button{padding:12px;font-size:17px} .meta{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="app" role="application" aria-label="Big Precision Calculator v2">
+  <div class="head">
+    <div class="title">
+      <span>Big Precision Calculator v2</span>
+      <span class="badge" id="badge">Ready</span>
+    </div>
+  </div>
+  <div class="sub">Arbitrary precision ÷ (async) + integer-only <b>n!</b>. Decimal point: dot‑fix ✅</div>
+
+  <div class="display" aria-live="polite">
+    <div class="hist" id="hist"></div>
+    <div class="curr" id="curr">0</div>
+  </div>
+
+  <div class="controls">
+    <label>Precision (division digits):
+      <input id="prec" type="number" min="0" max="100000" step="100" value="200">
+    </label>
+    <label>Max render digits:
+      <input id="maxrender" type="number" min="1000" max="500000" step="1000" value="100000">
+    </label>
+  </div>
+
+  <div class="toolbar">
+    <button data-pre="200">200</button>
+    <button data-pre="1000">1,000</button>
+    <button data-pre="5000">5,000</button>
+    <button data-pre="10000">10,000</button>
+    <button class="accent" id="factsBtn" title="n! quick facts (digits & trailing zeros)">n! facts</button>
+    <button class="warn" id="cancelBtn" title="Cancel running computation" disabled>Cancel</button>
+  </div>
+
+  <div class="grid">
+    <button class="warn" data-act="ac">AC</button>
+    <button data-act="ce">CE</button>
+    <button data-act="back">⌫</button>
+    <button class="op" data-op="div">÷</button>
+
+    <button data-num="7">7</button>
+    <button data-num="8">8</button>
+    <button data-num="9">9</button>
+    <button class="op" data-op="mul">×</button>
+
+    <button data-num="4">4</button>
+    <button data-num="5">5</button>
+    <button data-num="6">6</button>
+    <button class="op" data-op="sub">−</button>
+
+    <button data-num="1">1</button>
+    <button data-num="2">2</button>
+    <button data-num="3">3</button>
+    <button class="op" data-op="add">+</button>
+
+    <button data-act="neg">±</button>
+    <button data-num="0">0</button>
+    <button data-act="dot">.</button>
+    <button class="ok" data-act="eq">=</button>
+
+    <button class="gold span-2" id="factBtn">n!</button>
+    <button class="accent span-2" id="downloadBtn">Save as .txt</button>
+  </div>
+
+  <div class="meta" id="meta">
+    <div><b>Info:</b> <span id="metaInfo">—</span></div>
+    <div><b>Tips:</b> <span id="metaTips">n! only for non‑negative integers • You can cancel long runs anytime</span></div>
+  </div>
+
+  <div class="footer">If the output is larger than “Max render digits”, the <i>full</i> result is saved to a .txt automatically. ESC: AC.</div>
+</div>
+
+<script>
+"use strict";
+
+/* ===== Persistence (autosave) ===== */
+const STORE_KEY = "BPCv2_STATE";
+let saveTimer = null;
+
+function saveState(){
+  try{
+    const payload = {
+      display: document.getElementById("curr").textContent,
+      history: document.getElementById("hist").textContent,
+      prec: document.getElementById("prec").value,
+      maxrender: document.getElementById("maxrender").value
+    };
+    localStorage.setItem(STORE_KEY, JSON.stringify(payload));
+  }catch(e){ /* ignore */ }
+}
+
+function scheduleSave(){
+  if(saveTimer) clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveState, 120);
+}
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(!raw) return;
+    const s = JSON.parse(raw);
+    if(s.prec) document.getElementById("prec").value = s.prec;
+    if(s.maxrender) document.getElementById("maxrender").value = s.maxrender;
+    if(typeof s.history === "string") document.getElementById("hist").textContent = s.history;
+    if(typeof s.display === "string") document.getElementById("curr").textContent = s.display;
+  }catch(e){ /* ignore */ }
+}
+
+/* ===== Helpers ===== */
+function byId(id){ return document.getElementById(id); }
+const hist = byId("hist");
+const curr = byId("curr");
+const precEl = byId("prec");
+const maxrenderEl = byId("maxrender");
+const badge = byId("badge");
+const cancelBtn = byId("cancelBtn");
+const metaInfo = byId("metaInfo");
+
+let BUSY = false;
+let CANCEL = false;
+
+/* ===== Big decimal core (dot-fix typing retained) ===== */
+function N(sign, digits, scale){ return {sign, digits, scale}; }
+function isZero(n){ return n.digits === "0"; }
+function clone(n){ return {sign:n.sign, digits:n.digits, scale:n.scale}; }
+function norm(n){
+  let d = n.digits.replace(/^0+/, ""); if(d === "") d = "0";
+  if(d === "0") return N(1,"0",0);
+  while(n.scale > 0 && d.endsWith("0")){ d = d.slice(0,-1); n.scale--; }
+  return N(n.sign, d, n.scale);
+}
+function fromString(s){
+  s = (s+"").trim(); let sign = 1;
+  if(s.startsWith("+")) s = s.slice(1);
+  else if(s.startsWith("-")){ sign = -1; s = s.slice(1); }
+  if(!/^[0-9]*\.?[0-9]*$/.test(s)) throw new Error("Invalid");
+  if(s.includes(".")){ const [a,b=""] = s.split(".");
+    const digitsRaw = (a.replace(/^0+/,"") + b);
+    const digits = digitsRaw === "" ? "0" : digitsRaw.replace(/^0+$/,"0");
+    return norm(N(sign, digits, b.length));
+  } else {
+    const digits = s.replace(/^0+/,"") || "0";
+    return norm(N(sign, digits, 0));
+  }
+}
+function toString(n){
+  n = norm(clone(n)); if(isZero(n)) return "0";
+  const sgn = n.sign<0 ? "-" : "";
+  if(n.scale === 0) return sgn + n.digits;
+  const L = n.digits.length, i = L - n.scale;
+  if(i > 0) return sgn + n.digits.slice(0,i) + "." + n.digits.slice(i);
+  return sgn + "0." + "0".repeat(-i) + n.digits;
+}
+function cmpDigits(a,b){ if(a.length!==b.length) return a.length>b.length?1:-1; if(a===b) return 0; return a>b?1:-1; }
+function addDigits(a,b){
+  let i=a.length-1,j=b.length-1,c=0,o="";
+  while(i>=0||j>=0||c){ const da=i>=0?(a.charCodeAt(i)-48):0, db=j>=0?(b.charCodeAt(j)-48):0;
+    const s=da+db+c; o=(s%10)+o; c=(s/10)|0; i--; j--; }
+  return o.replace(/^0+/,"") || "0";
+}
+function subDigits(a,b){
+  let i=a.length-1,j=b.length-1,c=0,o="";
+  while(i>=0){ let da=(a.charCodeAt(i)-48)-c, db=j>=0?(b.charCodeAt(j)-48):0;
+    if(da<db){ da+=10; c=1;} else c=0; o=(da-db)+o; i--; j--; }
+  return o.replace(/^0+/,"") || "0";
+}
+function align(a,b){ let da=a.digits, db=b.digits, sa=a.scale, sb=b.scale;
+  if(sa<sb){ da+= "0".repeat(sb-sa); sa=sb; } else if(sb<sa){ db+= "0".repeat(sa-sb); sb=sa; }
+  return {A:N(a.sign,da,sa), B:N(b.sign,db,sb), scale:sa};
+}
+function add(a,b){
+  a=norm(clone(a)); b=norm(clone(b));
+  const {A,B,scale}=align(a,b);
+  if(A.sign===B.sign) return norm(N(A.sign, addDigits(A.digits,B.digits), scale));
+  const c=cmpDigits(A.digits,B.digits); if(c===0) return N(1,"0",0);
+  if(c>0) return norm(N(A.sign, subDigits(A.digits,B.digits), scale));
+  return norm(N(B.sign, subDigits(B.digits,A.digits), scale));
+}
+function neg(a){ return N(-a.sign, a.digits, a.scale); }
+function sub(a,b){ return add(a, neg(b)); }
+function mulDigits(a,b){
+  if(a==="0"||b==="0") return "0";
+  const n=a.length,m=b.length,res=new Array(n+m).fill(0);
+  for(let i=n-1;i>=0;i--){ const ai=a.charCodeAt(i)-48;
+    for(let j=m-1;j>=0;j--){ const bj=b.charCodeAt(j)-48; const k=i+j+1, s=ai*bj+res[k];
+      res[k]=s%10; res[k-1]+= (s/10)|0; } }
+  return res.join("").replace(/^0+/,"") || "0";
+}
+function mul(a,b){ a=norm(clone(a)); b=norm(clone(b));
+  return norm(N(a.sign*b.sign, mulDigits(a.digits,b.digits), a.scale+b.scale)); }
+
+/* ===== Async long-division ===== */
+function mulByDigit(divisor, d){
+  if(d===0) return "0";
+  let carry=0, out="";
+  for(let i=divisor.length-1;i>=0;i--){
+    const s=(divisor.charCodeAt(i)-48)*d + carry;
+    out = String(s%10) + out;
+    carry = (s/10)|0;
+  }
+  if(carry) out = String(carry)+out;
+  return out.replace(/^0+/,"") || "0";
+}
+function divStep(rem,div){
+  if(cmpDigits(rem,div)<0) return {q:0, r:rem};
+  let lo=1, hi=9, best=0;
+  while(lo<=hi){
+    const mid=(lo+hi)>>1;
+    const prod = mulByDigit(div, mid);
+    const c = cmpDigits(prod, rem);
+    if(c<=0){ best=mid; lo=mid+1; } else hi=mid-1;
+  }
+  const prod = mulByDigit(div, best);
+  const r = subDigits(rem, prod);
+  return {q:best, r};
+}
+async function divAsync(a,b,p, progressCb){
+  a=norm(clone(a)); b=norm(clone(b));
+  if(b.digits==="0") throw new Error("Division by zero");
+  p = Math.max(0, Math.min(100000, (p|0)));
+  let shift = p + b.scale - a.scale; if(shift<0) shift=0;
+  const dividend = a.digits + "0".repeat(shift);
+  const divisor = b.digits;
+  let rem="0", Q="", lastYield=0;
+  const total = dividend.length;
+  for(let i=0;i<dividend.length;i++){
+    if(CANCEL) throw new Error("Cancelled");
+    rem = (rem==="0"?"":rem) + dividend[i];
+    rem = rem.replace(/^0+/,"") || "0";
+    if(cmpDigits(rem,divisor)<0){ Q+="0"; }
+    else{ const {q,r}=divStep(rem,divisor); Q += String(q); rem=r; }
+    if(i-lastYield>=200){
+      lastYield=i;
+      if(progressCb) progressCb(((i+1)/total)*100);
+      await new Promise(r=>setTimeout(r,0));
+    }
+  }
+  Q = Q.replace(/^0+/,"") || "0";
+  return norm(N(a.sign*b.sign, Q, p));
+}
+
+/* ===== Factorial (integer-only), async, with facts ===== */
+function digitsCountOfFactorial(n){
+  if(n<2) return 1;
+  const pi = Math.PI, e = Math.E;
+  const x = n*Math.log10(n/e) + 0.5*Math.log10(2*pi*n);
+  return Math.floor(x)+1;
+}
+function trailingZerosOfFactorial(n){
+  let z=0; while(n){ n=(n/5)|0; z+=n; } return z;
+}
+async function factorialDigits(n, progressCb){
+  let res = "1";
+  let lastYield = 0;
+  for(let i=2;i<=n;i++){
+    if(CANCEL) throw new Error("Cancelled");
+    res = mulDigits(res, String(i));
+    if(i-lastYield>=25){
+      lastYield=i;
+      if(progressCb) progressCb((i/n)*100);
+      await new Promise(r=>setTimeout(r,0));
+    }
+  }
+  return res;
+}
+
+/* ===== UI typing (dot-fix) ===== */
+function setDisplayText(t){ curr.textContent=t; curr.scrollTop=curr.scrollHeight; scheduleSave(); }
+function showNumber(n){ curr.textContent = toString(n); curr.scrollTop = curr.scrollHeight; scheduleSave(); }
+function setHist(t){ hist.textContent = t || ""; hist.scrollLeft = hist.scrollWidth; scheduleSave(); }
+function setBadge(t){ badge.textContent = t; }
+function parseDisplay(){
+  let s = curr.textContent;
+  if(s.endsWith(".")) s = s.slice(0,-1);
+  if(s==="" || s==="-" ) s = "0";
+  return fromString(s);
+}
+
+let S = { x: fromString("0"), y: null, op: null, typing: false };
+
+function inputDigit(d){
+  if(BUSY) return;
+  let s = S.typing ? curr.textContent : "0";
+  if(s==="0" && !s.includes(".")) s="";
+  s += d;
+  setDisplayText(s);
+  try{ S.x = parseDisplay(); S.typing=true; }catch(e){ /* ignore */ }
+}
+function inputDot(){
+  if(BUSY) return;
+  let s = S.typing ? curr.textContent : "0";
+  if(s.includes(".")) return;
+  if(s==="") s="0";
+  s += ".";
+  setDisplayText(s);
+  S.typing = true;
+}
+function back(){
+  if(BUSY) return;
+  let s = curr.textContent;
+  if(!S.typing) s = toString(S.x);
+  if(s.length<=1){ s="0"; }
+  else{
+    s = s.slice(0,-1);
+    if(s==="" || s==="-" ) s="0";
+  }
+  setDisplayText(s);
+  try{ S.x = parseDisplay(); S.typing=true; }catch(e){}
+}
+function negate(){ if(BUSY) return; S.x.sign *= -1; showNumber(S.x); }
+function setOp(op){
+  if(BUSY) return;
+  if(S.op && S.y){ equals(); return; }
+  if(S.typing) S.x = parseDisplay();
+  S.y = S.x; S.x = fromString("0"); S.op = op; S.typing=false;
+  const sym = {add:"+", sub:"−", mul:"×", div:"÷"}[op] || "?";
+  setHist(toString(S.y) + " " + sym);
+}
+
+async function equals(){
+  if(BUSY) return;
+  if(!S.op || S.y===null) return;
+  try{
+    if(S.typing) S.x = parseDisplay();
+    BUSY = true; CANCEL=false; cancelBtn.disabled=false; setBadge("Working…");
+    let r;
+    if(S.op==="add") r=add(S.y,S.x);
+    else if(S.op==="sub") r=sub(S.y,S.x);
+    else if(S.op==="mul") r=mul(S.y,S.x);
+    else if(S.op==="div"){
+      const p=Math.max(0, Math.min(100000, parseInt(precEl.value||"0",10)));
+      setHist("Division… 0%");
+      r = await divAsync(S.y,S.x,p, (pct)=> setHist("Division… " + pct.toFixed(1) + "%"));
+      setHist(toString(S.y)+" ÷ "+toString(S.x)+" =");
+    }
+    S.x=r; S.y=null; S.op=null; S.typing=false; showNumber(r);
+  }catch(e){
+    curr.textContent = "Error: " + (e.message||"");
+    setHist("");
+  }finally{
+    BUSY = false; CANCEL=false; cancelBtn.disabled=true; setBadge("Ready"); scheduleSave();
+  }
+}
+
+/* ===== n! buttons ===== */
+function getCurrentInteger(){
+  const s = curr.textContent;
+  if(s.includes(".")) return null;
+  try{
+    const n = parseInt(s,10);
+    if(isNaN(n) || n<0) return null;
+    return n;
+  }catch(_){ return null; }
+}
+
+async function doFacts(){
+  const n = getCurrentInteger();
+  if(n===null){ setHist("n! facts: only non‑negative integers"); return; }
+  const digits = digitsCountOfFactorial(n);
+  const zeros = trailingZerosOfFactorial(n);
+  metaInfo.textContent = `n = ${n.toLocaleString()} • digits(n!) ≈ ${digits.toLocaleString()} • trailing zeros = ${zeros.toLocaleString()}`;
+  setHist(`${n}! quick facts ready`);
+}
+
+async function doFactorial(){
+  const n = getCurrentInteger();
+  if(n===null){ setHist("n!: only non‑negative integers"); return; }
+  const HARD_CAP = 20000;
+  if(n > HARD_CAP){ setHist(`n! too large (>${HARD_CAP}). Try a smaller n.`); return; }
+
+  const estimateDigits = digitsCountOfFactorial(n);
+  const zeros = trailingZerosOfFactorial(n);
+  metaInfo.textContent = `n = ${n.toLocaleString()} • digits(n!) ≈ ${estimateDigits.toLocaleString()} • trailing zeros = ${zeros.toLocaleString()}`;
+
+  try{
+    BUSY = true; CANCEL=false; cancelBtn.disabled=false; setBadge("n!…");
+    setHist(`Computing n!… 0% (${estimateDigits.toLocaleString()} digits expected)`);
+    const digits = await factorialDigits(n, (pct)=> setHist(`Computing n!… ${pct.toFixed(1)}% (${estimateDigits.toLocaleString()} digits)`));
+    const cap = Math.max(1000, Math.min(500000, parseInt(maxrenderEl.value||"100000",10)));
+    if(digits.length > cap){
+      setHist(`${n}! done • full output saved to .txt`);
+      curr.textContent = `Output too large to render (${digits.length.toLocaleString()} digits).`;
+      saveTextFile(`factorial_${n}.txt`, digits);
+    }else{
+      curr.textContent = digits;
+    }
+  }catch(e){
+    curr.textContent = "Error: " + (e.message||"");
+    setHist("");
+  }finally{
+    BUSY = false; CANCEL=false; cancelBtn.disabled=true; setBadge("Ready"); scheduleSave();
+  }
+}
+
+/* ===== Save helper ===== */
+function saveTextFile(filename, text){
+  const blob=new Blob([text],{type:'text/plain'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+
+/* ===== Wiring ===== */
+document.querySelectorAll("button[data-pre]").forEach(b=> b.addEventListener("click", ()=>{ precEl.value=b.dataset.pre; scheduleSave(); }));
+document.querySelectorAll("button[data-num]").forEach(b=> b.addEventListener("click", ()=>inputDigit(b.dataset.num)));
+document.querySelector("button[data-act='dot']").addEventListener("click", inputDot);
+document.querySelector("button[data-act='back']").addEventListener("click", back);
+document.querySelector("button[data-act='neg']").addEventListener("click", negate);
+document.querySelector("button[data-act='ce']").addEventListener("click", ()=>{ if(BUSY) return; S.x=fromString("0"); S.typing=false; showNumber(S.x); });
+document.querySelector("button[data-act='ac']").addEventListener("click", ()=>{ if(BUSY) return; S = { x: fromString("0"), y:null, op:null, typing:false }; setHist(""); showNumber(S.x); });
+document.querySelector("button[data-act='eq']").addEventListener("click", equals);
+document.getElementById("downloadBtn").addEventListener("click", ()=>{ const t=curr.textContent||""; if(!t){ setHist("Nothing to save"); return; } saveTextFile("big_precision_output.txt", t); });
+
+document.querySelectorAll("button[data-op]").forEach(b=> b.addEventListener("click", ()=>setOp(b.dataset.op)));
+byId("factsBtn").addEventListener("click", doFacts);
+byId("factBtn").addEventListener("click", doFactorial);
+cancelBtn.addEventListener("click", ()=>{ CANCEL = true; setHist("Cancel requested…"); });
+
+/* Keyboard */
+window.addEventListener("keydown",(e)=>{
+  if(BUSY && !['Escape'].includes(e.key)) return;
+  if(e.key>='0'&&e.key<='9') inputDigit(e.key);
+  else if(e.key==='.'||e.key===',') inputDot();
+  else if(e.key==='+') setOp('add');
+  else if(e.key==='-') setOp('sub');
+  else if(e.key==='*') setOp('mul');
+  else if(e.key==='/') setOp('div');
+  else if(e.key==='!'){ doFactorial(); }
+  else if(e.key==='Enter' || e.key==='=') equals();
+  else if(e.key==='Backspace') back();
+  else if(e.key==='Escape'){ S = { x: fromString("0"), y:null, op:null, typing:false }; setHist(""); showNumber(S.x); }
+});
+
+/* Init */
+loadState();
+S = { x: fromString(curr.textContent || "0"), y:null, op:null, typing:false };
+// If display ended with a dot, keep as-is; parseDisplay will handle when needed
+scheduleSave();
+window.addEventListener("beforeunload", saveState);
+</script>
+</body>
+</html>
